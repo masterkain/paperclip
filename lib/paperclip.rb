@@ -48,6 +48,11 @@ if defined?(Rails.root) && Rails.root
   end
 end
 
+Dir.glob(File.expand_path("../paperclip/storage/*.rb", __FILE__)).each do |processor|
+  require processor
+end
+
+
 # The base module that gets included in ActiveRecord::Base. See the
 # documentation for Paperclip::ClassMethods for more useful information.
 module Paperclip
