@@ -15,14 +15,6 @@ module Paperclip
         when %r"html?"                 then "text/html"
         when "js"                      then "application/js"
         when "csv", "xml", "css"       then "text/#{type}"
-        # Patched by kain. There are no other ways around, because the file command
-        # is unreliable in our case.
-        when "mp3"                     then "audio/mpeg"
-        when "wma"                     then "audio/x-ms-wma"
-        when "flac"                    then "audio/x-flac"
-        when "aiff"                    then "audio/x-aiff"
-        when "m4a"                     then "audio/x-m4a"
-        when "ogg"                     then "audio/x-ogg"
         else
           # On BSDs, `file` doesn't give a result code of 1 if the file doesn't exist.
           content_type = (Paperclip.run("file", "-b --mime-type :file", :file => self.path).split(':').last.strip rescue "application/x-#{type}")
