@@ -74,14 +74,20 @@ module Paperclip
           @s3_protocol    = @options[:s3_protocol]    || (@s3_permissions == :public_read ? 'http' : 'https')
           @s3_headers     = @options[:s3_headers]     || {}
           @s3_host_alias  = @options[:s3_host_alias]  || @bucket
+          @s3_expires_in  = @options[:s3_expires_in]
+          @s3_expires_in  = @s3_expires_in.call(self) if @s3_expires_in.is_a?(Proc)
+
           unless @url.to_s.match(/^:s3.*url$/)
             @path          = @path.gsub(/:url/, @url)
             @url           = ":s3_path_url"
           end
-          AWS::S3::Base.establish_connection!( @s3_options.merge(
-            :access_key_id => @s3_credentials[:access_key_id],
-            :secret_access_key => @s3_credentials[:secret_access_key]
-          ))
+
+          AWS::S3::Base.establish_connection!(
+            @s3_options.merge(
+              :access_key_id => @s3_credentials[:access_key_id],
+              :secret_access_key => @s3_credentials[:secret_access_key]
+            )
+          )
         end
         Paperclip.interpolates(:s3_alias_url) do |attachment, style|
           "#{attachment.s3_protocol}://#{attachment.s3_host_alias}/#{attachment.path(style).gsub(%r{^/}, "")}"
@@ -95,7 +101,7 @@ module Paperclip
       end
 
       def expiring_url(time = 3600)
-        AWS::S3::S3Object.url_for(path, bucket_name, :expires_in => time, :use_ssl => s3_protocol == 'https')
+        AWS::S3::S3Object.url_for(path, bucket_name, :expires_in => s3_expires_in || time, :use_ssl => s3_protocol == 'https')
       end
 
       def bucket_name
@@ -106,7 +112,11 @@ module Paperclip
         @s3_host_alias
       end
 
-      def parse_credentials creds
+      def s3_expires_in
+        @s3_expires_in
+      end
+
+      def parse_credentials(creds)
         creds = find_credentials(creds).stringify_keys
         (creds[Rails.env] || creds).symbolize_keys
       end
@@ -142,7 +152,7 @@ module Paperclip
                                     bucket_name,
                                     {:content_type => instance_read(:content_type),
                                      :access => @s3_permissions,
-                                    }.merge(@s3_headers))
+                                     }.merge(@s3_headers))
           rescue AWS::S3::ResponseError => e
             raise
           end
@@ -162,16 +172,16 @@ module Paperclip
         @queued_for_delete = []
       end
 
-      def find_credentials creds
+      def find_credentials(creds)
         case creds
-        when File
-          YAML::load(ERB.new(File.read(creds.path)).result)
-        when String, Pathname
-          YAML::load(ERB.new(File.read(creds)).result)
-        when Hash
-          creds
-        else
-          raise ArgumentError, "Credentials are not a path, file, or hash."
+          when File
+            YAML::load(ERB.new(File.read(creds.path)).result)
+          when String, Pathname
+            YAML::load(ERB.new(File.read(creds)).result)
+          when Hash
+            creds
+          else
+            raise ArgumentError, "Credentials are not a path, file, or hash."
         end
       end
       private :find_credentials
