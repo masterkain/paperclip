@@ -16,11 +16,12 @@ module Paperclip
         :default_style     => :original,
         :storage           => :filesystem,
         :use_timestamp     => true,
-        :whiny             => Paperclip.options[:whiny] || Paperclip.options[:whiny_thumbnails]
+        :whiny             => Paperclip.options[:whiny] || Paperclip.options[:whiny_thumbnails],
+        :content_type_strategy => :believe_client
       }
     end
 
-    attr_reader :name, :instance, :default_style, :convert_options, :queued_for_write, :whiny, :options
+    attr_reader :name, :instance, :default_style, :convert_options, :queued_for_write, :whiny, :options, :content_type_strategy
 
     # Creates an Attachment object. +name+ is the name of the attachment,
     # +instance+ is the ActiveRecord object instance it's attached to, and
@@ -49,6 +50,7 @@ module Paperclip
       @queued_for_write  = {}
       @errors            = {}
       @dirty             = false
+      @content_type_strategy = options[:content_type_strategy]
 
       initialize_storage
     end
@@ -90,7 +92,7 @@ module Paperclip
 
       @queued_for_write[:original]   = uploaded_file.to_tempfile
       instance_write(:file_name,       uploaded_file.original_filename.strip)
-      instance_write(:content_type,    uploaded_file.content_type.to_s.strip)
+      instance_write(:content_type,    determine_content_type(uploaded_file))
       instance_write(:file_size,       uploaded_file.size.to_i)
       instance_write(:fingerprint,     uploaded_file.fingerprint)
       instance_write(:updated_at,      Time.now)
@@ -185,8 +187,8 @@ module Paperclip
 
     # Returns the content_type of the file as originally assigned, and lives
     # in the <attachment>_content_type attribute of the model.
-    def content_type
-      instance_read(:content_type)
+    def content_type(style = default_style)
+      (style == :original) ? instance_read(:content_type) : Paperclip.content_type_for(interpolate(':extension', style))
     end
 
     # Returns the last modified time of the file as originally assigned, and
@@ -257,86 +259,131 @@ module Paperclip
 
     private
 
-    def ensure_required_accessors! #:nodoc:
-      %w(file_name).each do |field|
-        unless @instance.respond_to?("#{name}_#{field}") && @instance.respond_to?("#{name}_#{field}=")
-          raise PaperclipError.new("#{@instance.class} model missing required attr_accessor for '#{name}_#{field}'")
-        end
-      end
-    end
+      GENERIC_CONTENT_TYPES = %w(
+        application/octet
+        application/octet-stream
+      )
 
-    def log message #:nodoc:
-      Paperclip.log(message)
-    end
-
-    def valid_assignment? file #:nodoc:
-      file.nil? || (file.respond_to?(:original_filename) && file.respond_to?(:content_type))
-    end
-
-    def initialize_storage #:nodoc:
-      storage_class_name = @storage.to_s.capitalize
-      storage_file_name = @storage.to_s.downcase
-      begin
-        require "paperclip/storage/#{storage_file_name}"
-      rescue MissingSourceFile
-        raise StorageMethodNotFound, "Cannot load 'paperclip/storage/#{storage_file_name}'"
-      end
-      @storage_module = Paperclip::Storage.const_get(storage_class_name)
-      self.extend(@storage_module)
-    end
-
-    def extra_options_for(style) #:nodoc:
-      all_options   = convert_options[:all]
-      all_options   = all_options.call(instance)   if all_options.respond_to?(:call)
-      style_options = convert_options[style]
-      style_options = style_options.call(instance) if style_options.respond_to?(:call)
-
-      [ style_options, all_options ].compact.join(" ")
-    end
-
-    def post_process #:nodoc:
-      return if @queued_for_write[:original].nil?
-      instance.run_paperclip_callbacks(:post_process) do
-        instance.run_paperclip_callbacks(:"#{name}_post_process") do
-          post_process_styles
-        end
-      end
-    end
-
-    def post_process_styles #:nodoc:
-      styles.each do |name, style|
-        begin
-          raise RuntimeError.new("Style #{name} has no processors defined.") if style.processors.blank?
-          @queued_for_write[name] = style.processors.inject(@queued_for_write[:original]) do |file, processor|
-            Paperclip.processor(processor).make(file, style.processor_options, self)
+      def ensure_required_accessors! #:nodoc:
+        %w(file_name).each do |field|
+          unless @instance.respond_to?("#{name}_#{field}") && @instance.respond_to?("#{name}_#{field}=")
+            raise PaperclipError.new("#{@instance.class} model missing required attr_accessor for '#{name}_#{field}'")
           end
-        rescue PaperclipError => e
-          log("An error was received while processing: #{e.inspect}")
-          (@errors[:processing] ||= []) << e.message if @whiny
         end
       end
-    end
 
-    def interpolate pattern, style_name = default_style #:nodoc:
-      Paperclip::Interpolations.interpolate(pattern, self, style_name)
-    end
-
-    def queue_existing_for_delete #:nodoc:
-      return unless file?
-      @queued_for_delete += [:original, *styles.keys].uniq.map do |style|
-        path(style) if exists?(style)
-      end.compact
-      instance_write(:file_name, nil)
-      instance_write(:content_type, nil)
-      instance_write(:file_size, nil)
-      instance_write(:updated_at, nil)
-    end
-
-    def flush_errors #:nodoc:
-      @errors.each do |error, message|
-        [message].flatten.each {|m| instance.errors.add(name, m) }
+      def log message #:nodoc:
+        Paperclip.log(message)
       end
-    end
+
+      def valid_assignment? file #:nodoc:
+        file.nil? || (file.respond_to?(:original_filename) && file.respond_to?(:content_type))
+      end
+
+      def initialize_storage #:nodoc:
+        storage_class_name = @storage.to_s.capitalize
+        storage_file_name = @storage.to_s.downcase
+        begin
+          require "paperclip/storage/#{storage_file_name}"
+        rescue MissingSourceFile
+          raise StorageMethodNotFound, "Cannot load 'paperclip/storage/#{storage_file_name}'"
+        end
+        @storage_module = Paperclip::Storage.const_get(storage_class_name)
+        self.extend(@storage_module)
+      end
+
+      def extra_options_for(style) #:nodoc:
+        all_options   = convert_options[:all]
+        all_options   = all_options.call(instance)   if all_options.respond_to?(:call)
+        style_options = convert_options[style]
+        style_options = style_options.call(instance) if style_options.respond_to?(:call)
+
+        [ style_options, all_options ].compact.join(" ")
+      end
+
+      def post_process #:nodoc:
+        return if @queued_for_write[:original].nil?
+        instance.run_paperclip_callbacks(:post_process) do
+          instance.run_paperclip_callbacks(:"#{name}_post_process") do
+            post_process_styles
+          end
+        end
+      end
+
+      def post_process_styles #:nodoc:
+        styles.each do |name, style|
+          begin
+            raise RuntimeError.new("Style #{name} has no processors defined.") if style.processors.blank?
+            @queued_for_write[name] = style.processors.inject(@queued_for_write[:original]) do |file, processor|
+              Paperclip.processor(processor).make(file, style.processor_options, self)
+            end
+          rescue PaperclipError => e
+            log("An error was received while processing: #{e.inspect}")
+            (@errors[:processing] ||= []) << e.message if @whiny
+          end
+        end
+      end
+
+      def interpolate pattern, style_name = default_style #:nodoc:
+        Paperclip::Interpolations.interpolate(pattern, self, style_name)
+      end
+
+      def queue_existing_for_delete #:nodoc:
+        return unless file?
+        @queued_for_delete += [:original, *styles.keys].uniq.map do |style|
+          path(style) if exists?(style)
+        end.compact
+        instance_write(:file_name, nil)
+        instance_write(:content_type, nil)
+        instance_write(:file_size, nil)
+        instance_write(:updated_at, nil)
+      end
+
+      def flush_errors #:nodoc:
+        @errors.each do |error, message|
+          [message].flatten.each {|m| instance.errors.add(name, m) }
+        end
+      end
+
+
+      def determine_content_type(uploaded_file)
+        nominal_content_type = normalize_content_type(uploaded_file.content_type)
+
+        case content_type_strategy
+          when :believe_client
+            nominal_content_type
+          when :from_extension
+            determine_content_type_from_extension(uploaded_file)
+          when :from_extension_when_generic
+            determine_content_type_from_extension_when_generic(uploaded_file)
+          else
+            raise NotImplementedError, "Don't know how to dispatch content type strategy #{content_type_strategy}"
+        end
+      end
+
+      def determine_content_type_from_extension(uploaded_file)
+        extension = File.extname(uploaded_file.original_filename.strip)
+        extension = extension[1..-1] # lose leading dot
+        extension ||= ''
+
+        Paperclip.content_type_for extension
+      end
+
+      def determine_content_type_from_extension_when_generic(uploaded_file)
+        if generic_content_type?(uploaded_file.content_type)
+          determine_content_type_from_extension(uploaded_file)
+        else
+          normalize_content_type(uploaded_file.content_type)
+        end
+      end
+
+      def normalize_content_type(content_type)
+        content_type.to_s.strip
+      end
+
+      def generic_content_type?(content_type)
+        GENERIC_CONTENT_TYPES.include?(content_type)
+      end
 
   end
 end
