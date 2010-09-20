@@ -73,7 +73,7 @@ module Paperclip
           @s3_permissions = @options[:s3_permissions] || :public_read
           @s3_protocol    = @options[:s3_protocol]    || (@s3_permissions == :public_read ? 'http' : 'https')
           @s3_headers     = @options[:s3_headers]     || {}
-          @s3_host_alias  = @options[:s3_host_alias]
+          @s3_host_alias  = @options[:s3_host_alias]  || @bucket
           unless @url.to_s.match(/^:s3.*url$/)
             @path          = @path.gsub(/:url/, @url)
             @url           = ":s3_path_url"
@@ -95,7 +95,7 @@ module Paperclip
       end
 
       def expiring_url(time = 3600)
-        AWS::S3::S3Object.url_for(path, bucket_name, :expires_in => time )
+        AWS::S3::S3Object.url_for(path, bucket_name, :expires_in => time, :use_ssl => s3_protocol == 'https')
       end
 
       def bucket_name
