@@ -101,7 +101,7 @@ module Paperclip
       end
 
       def expiring_url(time = 3600)
-        AWS::S3::S3Object.url_for(path, bucket_name, :expires_in => s3_expires_in || time, :use_ssl => s3_protocol == 'https')
+        AWS::S3::S3Object.url_for(path, bucket_name, :expires_in => time, :use_ssl => s3_protocol == 'https')
       end
 
       def bucket_name
