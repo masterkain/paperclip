@@ -8,18 +8,26 @@ module Paperclip
     def content_type
       type = (self.path.match(/\.(\w+)$/)[1] rescue "octet-stream").downcase
       case type
-      when %r"jp(e|g|eg)"            then "image/jpeg"
-      when %r"tiff?"                 then "image/tiff"
-      when %r"png", "gif", "bmp"     then "image/#{type}"
-      when "txt"                     then "text/plain"
-      when %r"html?"                 then "text/html"
-      when "js"                      then "application/js"
-      when "csv", "xml", "css"       then "text/#{type}"
-      else
-        # On BSDs, `file` doesn't give a result code of 1 if the file doesn't exist.
-        content_type = (Paperclip.run("file", "-b --mime-type :file", :file => self.path).split(':').last.strip rescue "application/x-#{type}")
-        content_type = "application/x-#{type}" if content_type.match(/\(.*?\)/)
-        content_type
+        when %r"jp(e|g|eg)"            then "image/jpeg"
+        when %r"tiff?"                 then "image/tiff"
+        when %r"png", "gif", "bmp"     then "image/#{type}"
+        when "txt"                     then "text/plain"
+        when %r"html?"                 then "text/html"
+        when "js"                      then "application/js"
+        when "csv", "xml", "css"       then "text/#{type}"
+        # Patched by kain. There are no other ways around, because the file command
+        # is unreliable in our case.
+        when "mp3"                     then "audio/mpeg"
+        when "wma"                     then "audio/x-ms-wma"
+        when "flac"                    then "audio/x-flac"
+        when "aiff"                    then "audio/x-aiff"
+        when "m4a"                     then "audio/x-m4a"
+        when "ogg"                     then "audio/x-ogg"
+        else
+          # On BSDs, `file` doesn't give a result code of 1 if the file doesn't exist.
+          content_type = (Paperclip.run("file", "-b --mime-type :file", :file => self.path).split(':').last.strip rescue "application/x-#{type}")
+          content_type = "application/x-#{type}" if content_type.match(/\(.*?\)/)
+          content_type
       end
     end
 
