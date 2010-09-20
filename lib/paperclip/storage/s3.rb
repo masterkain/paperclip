@@ -74,8 +74,6 @@ module Paperclip
           @s3_protocol    = @options[:s3_protocol]    || (@s3_permissions == :public_read ? 'http' : 'https')
           @s3_headers     = @options[:s3_headers]     || {}
           @s3_host_alias  = @options[:s3_host_alias]  || @bucket
-          @s3_expires_in  = @options[:s3_expires_in]
-          @s3_expires_in  = @s3_expires_in.call(self) if @s3_expires_in.is_a?(Proc)
 
           unless @url.to_s.match(/^:s3.*url$/)
             @path          = @path.gsub(/:url/, @url)
@@ -110,10 +108,6 @@ module Paperclip
 
       def s3_host_alias
         @s3_host_alias
-      end
-
-      def s3_expires_in
-        @s3_expires_in
       end
 
       def parse_credentials(creds)
