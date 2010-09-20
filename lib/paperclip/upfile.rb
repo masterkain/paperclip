@@ -6,7 +6,6 @@ module Paperclip
 
     # Infer the MIME-type of the file from the extension.
     def content_type
-      debugger
       type = (self.path.match(/\.(\w+)$/)[1] rescue "octet-stream").downcase
       Paperclip.content_type_for(type)
     end
