@@ -282,13 +282,11 @@ module Paperclip
 
       def initialize_storage #:nodoc:
         storage_class_name = @storage.to_s.capitalize
-        storage_file_name = @storage.to_s.downcase
         begin
-          require "paperclip/storage/#{storage_file_name}"
-        rescue MissingSourceFile
-          raise StorageMethodNotFound, "Cannot load 'paperclip/storage/#{storage_file_name}'"
+          @storage_module = Paperclip::Storage.const_get(storage_class_name)
+        rescue NameError
+          raise StorageMethodNotFound, "Cannot load storage module '#{storage_class_name}'"
         end
-        @storage_module = Paperclip::Storage.const_get(storage_class_name)
         self.extend(@storage_module)
       end
 
@@ -350,14 +348,14 @@ module Paperclip
         nominal_content_type = normalize_content_type(uploaded_file.content_type)
 
         case content_type_strategy
-          when :believe_client
-            nominal_content_type
-          when :from_extension
-            determine_content_type_from_extension(uploaded_file)
-          when :from_extension_when_generic
-            determine_content_type_from_extension_when_generic(uploaded_file)
-          else
-            raise NotImplementedError, "Don't know how to dispatch content type strategy #{content_type_strategy}"
+        when :believe_client
+          nominal_content_type
+        when :from_extension
+          determine_content_type_from_extension(uploaded_file)
+        when :from_extension_when_generic
+          determine_content_type_from_extension_when_generic(uploaded_file)
+        else
+          raise NotImplementedError, "Don't know how to dispatch content type strategy #{content_type_strategy}"
         end
       end
 
