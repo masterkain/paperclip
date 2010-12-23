@@ -5,7 +5,7 @@ module Paperclip
         case type
           when "aac" then "audio/aac"
           when "mp3", "mp2" then "audio/mpeg"
-          when "m4a", "m4b", "m4p", "m4v", "m4r", "3gp", "mp4" then "audio/mp4"
+          when "m4a", "m4b", "m4v", "m4r", "3gp", "mp4" then "audio/mp4"
           when "ogg" then "application/ogg"
           when "flac" then "audio/flac"
           when "spx" then "audio/speex"
@@ -30,7 +30,7 @@ module Paperclip
           when "csv", "xml", "css", "js" then "text/#{type}"
           when "aac" then "audio/aac"
           when "mp3", "mp2" then "audio/mpeg"
-          when "m4a", "m4b", "m4p", "m4v", "m4r", "3gp", "mp4" then "audio/mp4"
+          when "m4a", "m4b", "m4v", "m4r", "3gp", "mp4" then "audio/mp4"
           when "ogg" then "application/ogg"
           when "flac" then "audio/flac"
           when "spx" then "audio/speex"
